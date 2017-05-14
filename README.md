@@ -110,7 +110,7 @@ Arguments to `aem` are divided up into **operations** and **instances** to perfo
 - **start**      : start all
 - **stop**       : stop all
 - **clean**      : delete the `crx-quickstart` folder
-- **unpack**     : Unpack but do not start the AEM instance - used when you need to add **`crx-quickstart/install`` folder for repository configuration etc
+- **unpack**     : Unpack but do not start the AEM instance - used when you need to add `crx-quickstart/install` folder for repository configuration etc
 - **compact**    : oak-run compaction (currently user specifies oak version)
 - **jps**        : run `$JAVA_HOME/jps` to see running java instances
 - **logs**       : open logs
@@ -128,8 +128,9 @@ Arguments to `aem` are divided up into **operations** and **instances** to perfo
     $ aem stop all
     $ aem author start open
     $ aem jps
+    $ aem ga urls
 
-    
+
 
 # License
 [MIT License](LICENSE)
