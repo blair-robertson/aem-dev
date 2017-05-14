@@ -1,0 +1,449 @@
+#!/bin/bash
+
+set -u
+
+###### DEFAULTS ######
+# Default values can be overridden in aem.conf
+AEM_JAR=""
+AEM_LICENSE=""
+
+AEM_RUNMODES="local"
+LOG_FILES=(error.log stdout.log)
+
+AEM_JVM_OPTS="-Xmx1024m -XX:MaxPermSize=256M"
+
+# default these to ENV variables if they exist
+JAVA_HOME="${JAVA_HOME:-/cygdrive/c/Program\ Files/Java/jdk1.8.0_20}"
+
+AEM_INSTANCES=(author publish)   # defines the prefix for following variables
+
+author_MODE="author"
+author_HOST="author.local"
+author_PORT="4502"
+
+publish_MODE="publish"
+publish_HOST="publish.local"
+publish_PORT="4503"
+
+###### END DEFAULTS ######
+
+
+echo "Searching for aem.conf in `pwd`";
+until [ `pwd` == "/" -o -f "aem.conf" ]; do
+  cd ../
+  echo "Searching for aem.conf in `pwd`";
+done;
+
+if [ ! -f aem.conf ]; then
+  echo "No aem.conf found in directory path" >&2
+  exit 1
+fi
+
+echo
+echo "BASE DIR : `pwd`";
+. aem.conf || exit 1
+
+if [ -z "$JAVA_HOME" -o ! -d "$JAVA_HOME" ]; then
+  echo "[ERROR] JAVA_HOME not set correctly" >&2
+  exit 1
+fi
+if [ -z "$AEM_JAR" -o ! -f "$AEM_JAR" ]; then
+  echo "[ERROR] AEM_JAR not set correctly" >&2
+  exit 1
+fi
+if [ -z "$AEM_LICENSE" -o ! -f "$AEM_LICENSE" ]; then
+  echo "[ERROR] AEM_LICENSE not set correctly" >&2
+  exit 1
+fi
+
+export JAVA_HOME
+
+export PATH=$JAVA_HOME/bin:$PATH;
+
+op=""
+
+all=""
+author=""
+publish=""
+debug=""
+browser=""
+
+instances=()
+
+while test ${#} -gt 0
+do
+  arg=`echo "$1" | tr 'A-Z' 'a-z' | sed 's!/!!g'`
+
+  if [ "$arg" == "url" ]; then
+    arg="urls"
+  fi
+
+  case $arg in
+  start|stop|clean|unpack|compact|jps|logs|urls)
+    if [ -n "$op" ]; then
+      echo "[ERROR] Only one operation allowed. Already '$op' and now '$1'" >&2
+      exit 1
+    fi
+
+    op="$1"
+    ;;
+  open)
+    declare "browser=browser"
+    ;;
+  debug|browser)
+    declare "$1=$1"
+    ;;
+  all)
+    instances=("${AEM_INSTANCES[@]}")
+    ;;
+  *)
+    for s in "${AEM_INSTANCES[@]}"; do
+      if [ "$arg" == "$s" ]; then
+        instances=("${instances[@]}" "$arg")
+      fi
+    done;
+    # echo "[WARN] Unknown arg '$1'" >&2
+    ;;
+  esac
+  shift
+done
+
+# if we have no op, but browser is set, then browser is op
+# this allows "aem <instance> start browser" and "aem <instance> browser"
+if [ -z "$op" -a -n "$browser" ]; then
+  op="$browser"
+  browser=""
+fi
+
+echo "
+operation : $op
+
+instances : ${instances[@]}
+
+debug   : $debug
+browser : $browser
+"
+
+if [ -z "$op" ]; then
+  echo "[ERROR] No operation specified" >&2
+  exit 1
+fi;
+
+if [ "$op" != "jps" -a "${#instances[@]}" -eq "0" ]; then
+  echo "[ERROR] No instances specified" >&2
+  exit 1
+fi;
+
+if [[ $AEM_JVM_OPTS != *"-Xmx"* ]]; then
+  echo "[ERROR] add -Xmx value into AEM_JVM_OPTS" >&2
+  exit 1
+fi
+
+CQ_JVM_OPTS="-server -Djava.awt.headless=true $AEM_JVM_OPTS"
+CQ_DEBUG_JVM_OPTS="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=1"
+
+
+function unpack_aem {
+
+  local instance="$1"
+
+  mkdir -p $instance
+  pushd $instance > /dev/null
+  if [ -d crx-quickstart ]; then
+    echo "[ERROR] Unable to unpack AEM $instance - Already crx-quickstart directory" >&2
+  else
+    java -jar $AEM_JAR -unpack
+  fi
+
+}
+
+function start_aem {
+
+  local instance="$1"
+
+  # variable variables...
+  local var_mode="${instance}_MODE"
+  local var_port="${instance}_PORT"
+  local var_host="${instance}_HOST"
+
+  local mode="${!var_mode}"
+  local port="${!var_port}"
+  local host="${!var_host}"
+
+  echo "Starting AEM $instance on http://$host:$port/"
+
+  mkdir -p $instance
+  pushd $instance > /dev/null
+  if [ ! -d crx-quickstart ]; then
+    java -jar $AEM_JAR -unpack
+  fi
+  if [ ! -f license.properties ]; then
+    cp $AEM_LICENSE license.properties
+  fi
+
+  export CQ_PORT=${port}
+  export CQ_RUNMODE="${mode},${AEM_RUNMODES}"
+  if [ -n "$debug" ]; then
+    echo ">> DEBUG PORT : 1$CQ_PORT";
+    CQ_JVM_OPTS="$CQ_JVM_OPTS $CQ_DEBUG_JVM_OPTS$CQ_PORT"
+  fi
+  export CQ_JVM_OPTS
+  ./crx-quickstart/bin/start
+
+  popd > /dev/null
+
+  echo -e "\n\n\n";
+
+}
+
+function stop_aem {
+
+  local instance="$1"
+
+  echo "Stopping AEM $instance"
+  ./$instance/crx-quickstart/bin/stop
+
+}
+
+function clean_aem {
+
+  local instance="$1"
+
+  echo "Cleaning AEM $instance"
+  if [ -d ./$instance/crx-quickstart ]; then
+    rm -r ./$instance/crx-quickstart
+  fi
+
+}
+
+function compact_aem {
+
+  local instance="$1"
+
+  local aem_running=`"$JAVA_HOME/bin/jps" -mlv | grep -c crx-quickstart`
+  echo $aem_running
+
+  if [ "$aem_running" -ne "0" ]; then
+    echo "[WARN] AEM instances running" >&2
+    run_jps
+    echo
+    read -p "Do you really want to continue? [y/N] " force
+    if [ "$force" != "y" ]; then
+      echo "Aborting";
+      return
+    fi
+    echo "OK, continuing"
+  fi;
+
+  echo "Compacting AEM $instance"
+
+  if [ ! -d ./$instance/crx-quickstart/repository -o ! -d ./$instance/crx-quickstart/launchpad ]; then
+    echo "[ERROR] No AEM repository dir found, refusing to compact" >&2
+    return
+  fi
+
+  echo
+  fgrep --color=always -r oak-core ./$instance/crx-quickstart/launchpad
+  echo
+
+  read -p "Enter the oak-core version (e.g. 1.4.10): " oak_version
+
+  oak_run_dir=`dirname "$AEM_JAR"`/oak-run
+
+  mkdir -p "$oak_run_dir" || exit 1
+
+  oak_run_jar="oak-run-$oak_version.jar"
+
+  oak_run="$oak_run_dir/$oak_run_jar"
+
+  if [ ! -f "$oak_run" ]; then
+    wget -O "$oak_run" "https://repo1.maven.org/maven2/org/apache/jackrabbit/oak-run/$oak_version/$oak_run_jar"
+    if [ "$?" -ne "0" ]; then
+      echo "[ERROR] Downloading oak-run failed" >&2
+      rm "$oak_run"
+      return;
+    fi
+  fi
+
+  echo "Found $oak_run";
+  read -p "Ready to continue : [y/N] " ready
+
+  if [ "$ready" != "y" ]; then
+    echo "Aborting" >&2
+    return;
+  fi
+
+  echo "BEFORE SIZE : "
+  du -shc ./$instance/crx-quickstart/repository/*
+
+  java -jar "$oak_run" checkpoints ./$instance/crx-quickstart/repository/segmentstore || exit 1
+
+  java -jar "$oak_run" checkpoints ./$instance/crx-quickstart/repository/segmentstore rm-unreferenced || exit 1
+
+  java -jar "$oak_run" compact ./$instance/crx-quickstart/repository/segmentstore || exit 1
+
+  echo "AFTER SIZE : "
+  du -shc ./$instance/crx-quickstart/repository/*
+
+  echo
+
+}
+
+function open_logs {
+
+  local log_files=()
+  for i in "$@"; do
+    for l in "${LOG_FILES[@]}"; do
+      log_files=("${log_files[@]}" "$i/crx-quickstart/logs/$l")
+    done;
+  done;
+
+  ls -al "${log_files[@]}"
+
+  if [ -n "`which baretail`" ]; then
+    baretail "${log_files[@]}" &
+  fi
+
+
+}
+
+function open_browser {
+
+  if [ -n "`which cygstart`" ]; then
+
+    log_files=()
+
+    local instances=("$@")
+    local remaining_instances=()
+
+    local attempts=1
+
+    while [ "${#instances[@]}" -gt 0 ]; do
+
+      remaining_instances=()
+
+      for instance in "${instances[@]}"; do
+        # variable variables...
+        var_port="${instance}_PORT"
+        var_host="${instance}_HOST"
+
+        port="${!var_port}"
+        host="${!var_host}"
+
+        echo "Attempt $attempts) Checking AEM $instance on http://$host:$port/"
+        local aem_ready=`curl -s -i -m 5 -L -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:52.0) Gecko/20100101 Firefox/52.0' "http://$host:$port/" | fgrep QUICKSTART_HOMEPAGE`;
+        if [ -n "$aem_ready" ]; then
+          echo ">>> Opening AEM $instance"
+          cygstart "http://$host:$port/crx/de/"
+        else
+          remaining_instances=("${remaining_instances[@]}" "$instance")
+        fi
+
+      done
+      instances=("${remaining_instances[@]}")
+
+      if [ "${#instances[@]}" -gt 0 ]; then
+        echo "Pausing for 30 seconds before trying again for : ${remaining_instances[@]}"
+        sleep 30;
+      fi
+
+      ((attempts+=1))
+
+      if [ $attempts -gt 10 ]; then
+        echo "Taking to long, aborting...." >&2;
+        return;
+      fi
+
+    done;
+
+  fi  
+
+}
+
+function show_urls {
+
+  local instances=("$@")
+
+  for instance in "${instances[@]}"; do
+    # variable variables...
+    var_port="${instance}_PORT"
+    var_host="${instance}_HOST"
+
+    port="${!var_port}"
+    host="${!var_host}"
+
+    echo "$instance : http://$host:$port/"
+
+  done
+
+}
+
+
+function run_jps {
+  echo "$JAVA_HOME/bin/jps" -mlv
+  "$JAVA_HOME/bin/jps" -mlv
+}
+
+
+case $op in
+start)
+
+  for i in "${instances[@]}"; do
+    start_aem $i
+  done;
+
+  echo "Waiting for 10 seconds"
+  sleep 10
+
+  open_logs "${instances[@]}"
+  run_jps
+
+  if [ -n "$browser" ]; then
+    open_browser "${instances[@]}"
+  fi
+
+  ;;
+
+stop)
+
+  for i in "${instances[@]}"; do
+    stop_aem $i
+  done;
+
+  run_jps
+  ;;
+
+clean)
+  for i in "${instances[@]}"; do
+    clean_aem $i
+  done;
+  ;;
+
+unpack)
+  for i in "${instances[@]}"; do
+    unpack_aem $i
+  done;
+  ;;
+
+compact)
+  for i in "${instances[@]}"; do
+    compact_aem $i
+  done;
+  ;;
+
+logs)
+  open_logs "${instances[@]}"
+  ;;
+
+browser)
+  open_browser "${instances[@]}"
+  ;;
+
+urls)
+  show_urls "${instances[@]}"
+  ;;
+
+jps)
+  run_jps
+  ;;
+esac
