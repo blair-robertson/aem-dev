@@ -154,6 +154,7 @@ function unpack_aem {
   else
     java -jar $AEM_JAR -unpack
   fi
+  popd > /dev/null
 
 }
 
