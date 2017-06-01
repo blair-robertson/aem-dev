@@ -87,18 +87,19 @@ Example:
     ....
 ```
 
-This script is just sourced by the `aem` script, defining some global variables and specific variables for each aem instance.
+This script is just sourced by the [`aem`](bin/aem) script, defining some global variables and specific variables for each aem instance.
 
 _Check the start of the `aem` script - it defines default values for these variables_
 
 - **AEM_JAR**       : the path to the original AEM jar to unpack and use
-- **AEM_LICENSE**   : the aem license file to
+- **AEM_LICENSE**   : the aem license file to use
 - **AEM_RUNMODES**  : runmodes to apply to ALL aem instances in this folder when they start up
-- **LOG_FILES**     : list of filenames to open logs for
+- **AEM_JVM_OPTS**  : JVM options to pass to java when starting AEM
+- **LOG_FILES**     : list of log files to open
 - **AEM_INSTANCES** : list of AEM instances names to consider valid in this folder (lowercase alphanumeric only used/tested)
 
 - **`<instancename>`_MODE** : list of extra modes for this AEM instances - minimum "author" or "publish"
-- **`<instancename>`_HOST** : hostname for this instance. I create a bunch of hostnames pointing to 127.0.0.1 in HOSTS file to avoid cookie clashes with different instances using `localhost`
+- **`<instancename>`_HOST** : hostname for this instance. I create a bunch of hostnames pointing to 127.0.0.1 in HOSTS file to avoid cookie clashes with different instances using `localhost`. You could also use `*.lvh.me`. See [google](https://www.google.com/search?q=lvh.me)
 - **`<instancename>`_PORT** : TCP port to start AEM on. Also used as debug port suffix. Come up with a numbering scheme that works for you to avoid clashes between instances that are commonly running at the same time.
 
 
@@ -107,20 +108,22 @@ _Check the start of the `aem` script - it defines default values for these varia
 Arguments to `aem` are divided up into **operations** and **instances** to perform the operations on. You can specify these in any order.
 
 #### Operations
-- **start**      : start all
-- **stop**       : stop all
+- **start**      : start aem
+- **stop**       : stop aem
 - **clean**      : delete the `crx-quickstart` folder
 - **unpack**     : Unpack but do not start the AEM instance - used when you need to add `crx-quickstart/install` folder for repository configuration etc
 - **compact**    : oak-run compaction (currently user specifies oak version)
-- **jps**        : run `$JAVA_HOME/jps` to see running java instances
+- **jps**        : run `$JAVA_HOME/jps` to see running java instances (for this JDK instance)
 - **logs**       : open logs
 - **urls**       : show urls (inc port number)
 - **browser**    : open urls in browser (after confirming AEM is running)
 - **open**       : alias for `browser`
-    
+- **testuser**   : authentication check - attempt to login to AEM using a specific account (prompted for account)
+- **conf**       : print the current applicable `aem.conf` or ask to create one if none found
+
 #### Instances
 
-- **all**      : special instance name to match all
+- **all**      : special instance name to match all instances listed in `AEM_INSTANCES`
 
 ### Examples
 

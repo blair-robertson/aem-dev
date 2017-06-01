@@ -13,7 +13,7 @@ LOG_FILES=(error.log stdout.log)
 AEM_JVM_OPTS="-Xmx1024m -XX:MaxPermSize=256M"
 
 # default these to ENV variables if they exist
-JAVA_HOME="${JAVA_HOME:-/cygdrive/c/Program\ Files/Java/jdk1.8.0_20}"
+JAVA_HOME="${JAVA_HOME:-}"
 
 AEM_INSTANCES=(author publish)   # defines the prefix for following variables
 
@@ -27,38 +27,34 @@ publish_PORT="4503"
 
 ###### END DEFAULTS ######
 
-
+orig_pwd=`pwd`
 echo "Searching for aem.conf in `pwd`";
 until [ `pwd` == "/" -o -f "aem.conf" ]; do
   cd ../
   echo "Searching for aem.conf in `pwd`";
 done;
 
+echo
+
 if [ ! -f aem.conf ]; then
   echo "No aem.conf found in directory path" >&2
-  exit 1
+
+  # exit unless we are running 'conf' operation
+  if [[ "$@" != *"conf"* ]]; then
+    exit 1
+  fi
+
+  # change back to original directory
+  cd "$orig_pwd"
+  echo "BASE DIR : $orig_pwd";
+
+else
+
+  echo "BASE DIR : `pwd`";
+  . aem.conf || exit 1
+
 fi
 
-echo
-echo "BASE DIR : `pwd`";
-. aem.conf || exit 1
-
-if [ -z "$JAVA_HOME" -o ! -d "$JAVA_HOME" ]; then
-  echo "[ERROR] JAVA_HOME not set correctly" >&2
-  exit 1
-fi
-if [ -z "$AEM_JAR" -o ! -f "$AEM_JAR" ]; then
-  echo "[ERROR] AEM_JAR not set correctly" >&2
-  exit 1
-fi
-if [ -z "$AEM_LICENSE" -o ! -f "$AEM_LICENSE" ]; then
-  echo "[ERROR] AEM_LICENSE not set correctly" >&2
-  exit 1
-fi
-
-export JAVA_HOME
-
-export PATH=$JAVA_HOME/bin:$PATH;
 
 op=""
 
@@ -79,7 +75,7 @@ do
   fi
 
   case $arg in
-  start|stop|clean|unpack|compact|jps|logs|urls)
+  conf|start|stop|clean|unpack|compact|jps|logs|urls|testuser)
     if [ -n "$op" ]; then
       echo "[ERROR] Only one operation allowed. Already '$op' and now '$1'" >&2
       exit 1
@@ -129,7 +125,7 @@ if [ -z "$op" ]; then
   exit 1
 fi;
 
-if [ "$op" != "jps" -a "${#instances[@]}" -eq "0" ]; then
+if [ "$op" != "conf" -a "$op" != "jps" -a "${#instances[@]}" -eq "0" ]; then
   echo "[ERROR] No instances specified" >&2
   exit 1
 fi;
@@ -142,10 +138,64 @@ fi
 CQ_JVM_OPTS="-server -Djava.awt.headless=true $AEM_JVM_OPTS"
 CQ_DEBUG_JVM_OPTS="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=1"
 
+function show_create_conf {
+
+  if [ ! -f aem.conf ]; then
+
+    read -p "Do you want to create an aem.conf? [y/N] " create_file
+    if [ "$create_file" != "y" ]; then
+      return
+    fi
+
+    cat > aem.conf <<zzzENDAEMCONF
+AEM_JAR=""
+AEM_LICENSE=""
+
+AEM_RUNMODES="local"
+LOG_FILES=(error.log stdout.log)
+
+#AEM_JVM_OPTS="-Xmx1024m -XX:MaxPermSize=256M"
+
+#JAVA_HOME=""
+
+AEM_INSTANCES=(author publish)   # defines the prefix for following variables
+
+author_MODE="author"
+author_HOST="author.local"
+author_PORT="4502"
+
+publish_MODE="publish"
+publish_HOST="publish.local"
+publish_PORT="4503"
+zzzENDAEMCONF
+
+    echo "Created aem.conf"
+  fi
+
+  echo "-------------- aem.conf -----------------"
+  cat aem.conf
+  echo "-----------------------------------------"
+
+}
+
+function _check_aem_prereqs {
+
+  if [ -z "$AEM_JAR" -o ! -f "$AEM_JAR" ]; then
+    echo "[ERROR] AEM_JAR not set correctly" >&2
+    exit 1
+  fi
+  if [ -z "$AEM_LICENSE" -o ! -f "$AEM_LICENSE" ]; then
+    echo "[ERROR] AEM_LICENSE not set correctly" >&2
+    exit 1
+  fi
+
+}
 
 function unpack_aem {
 
   local instance="$1"
+
+  _check_aem_prereqs
 
   mkdir -p $instance
   pushd $instance > /dev/null
@@ -161,6 +211,8 @@ function unpack_aem {
 function start_aem {
 
   local instance="$1"
+
+  _check_aem_prereqs
 
   # variable variables...
   local var_mode="${instance}_MODE"
@@ -385,16 +437,57 @@ function run_jps {
   "$JAVA_HOME/bin/jps" -mlv
 }
 
+function test_user {
+
+  local instances=("$@")
+
+  read -p "Username: " -i "admin" lusername
+  read -p "Password: " -i "admin" lpassword
+
+  for instance in "${instances[@]}"; do
+    # variable variables...
+    var_port="${instance}_PORT"
+    var_host="${instance}_HOST"
+
+    port="${!var_port}"
+    host="${!var_host}"
+
+    echo "$instance : http://$host:$port/"
+
+    set -x
+    curl -i -u "$lusername:$lpassword" "http://$host:$port/libs/cq/security/userinfo.json"
+
+  done
+
+}
+
+if [ -z "$JAVA_HOME" -o ! -d "$JAVA_HOME" ]; then
+  if [ "$op" != "conf" ]; then
+    echo "[ERROR] JAVA_HOME not set correctly : '$JAVA_HOME'" >&2
+    exit 1
+  else
+    echo "[WARN] JAVA_HOME not set correctly : '$JAVA_HOME'" >&2
+  fi
+fi
+
+export JAVA_HOME
+
+export PATH=$JAVA_HOME/bin:$PATH;
+
 
 case $op in
+conf)
+  show_create_conf
+  ;;
+
 start)
 
   for i in "${instances[@]}"; do
     start_aem $i
   done;
 
-  echo "Waiting for 10 seconds"
-  sleep 10
+  echo "Waiting for 5 seconds"
+  sleep 5
 
   open_logs "${instances[@]}"
   run_jps
@@ -442,6 +535,10 @@ browser)
 
 urls)
   show_urls "${instances[@]}"
+  ;;
+
+testuser)
+  test_user "${instances[@]}"
   ;;
 
 jps)
