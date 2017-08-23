@@ -77,17 +77,17 @@ do
   case $arg in
   conf|start|stop|clean|unpack|compact|jps|logs|urls|testuser)
     if [ -n "$op" ]; then
-      echo "[ERROR] Only one operation allowed. Already '$op' and now '$1'" >&2
+      echo "[ERROR] Only one operation allowed. Already '$op' and now '$arg'" >&2
       exit 1
     fi
 
-    op="$1"
+    op="$arg"
     ;;
   open)
     declare "browser=browser"
     ;;
   debug|browser)
-    declare "$1=$1"
+    declare "$arg=$arg"
     ;;
   all)
     instances=("${AEM_INSTANCES[@]}")
@@ -98,7 +98,7 @@ do
         instances=("${instances[@]}" "$arg")
       fi
     done;
-    # echo "[WARN] Unknown arg '$1'" >&2
+    # echo "[WARN] Unknown arg '$arg'" >&2
     ;;
   esac
   shift
