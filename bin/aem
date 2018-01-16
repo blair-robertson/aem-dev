@@ -27,6 +27,12 @@ publish_PORT="4503"
 
 ###### END DEFAULTS ######
 
+
+CYGWIN=""
+if [[ "$(uname -s)" == *"CYGWIN"* ]]; then
+  CYGWIN="CYGWIN"
+fi
+
 orig_pwd=`pwd`
 echo "Searching for aem.conf in `pwd`";
 until [ `pwd` == "/" -o -f "aem.conf" ]; do
@@ -470,10 +476,13 @@ if [ -z "$JAVA_HOME" -o ! -d "$JAVA_HOME" ]; then
   fi
 fi
 
+if [ -n "$CYGWIN" ]; then
+  JAVA_HOME=`cygpath -u "$JAVA_HOME"`
+fi
+
 export JAVA_HOME
 
 export PATH=$JAVA_HOME/bin:$PATH;
-
 
 case $op in
 conf)
