@@ -324,6 +324,10 @@ function compact_aem {
     fi
   fi
 
+  if [ -n "`which cygpath`" ]; then
+  	oak_run=`cygpath -wa "$oak_run"`
+  fi
+
   echo "Found $oak_run";
   read -p "Ready to continue : [y/N] " ready
 
