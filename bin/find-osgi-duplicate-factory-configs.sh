@@ -2,7 +2,7 @@
 ########################################################################################
 # MIT License                                                                          #
 #                                                                                      #
-# Copyright (c) Blair Robertson 2017                                                   #
+# Copyright (c) Blair Robertson 2018                                                   #
 #                                                                                      #
 # Permission is hereby granted, free of charge, to any person obtaining a copy         #
 # of this software and associated documentation files (the "Software"), to deal        #
@@ -29,7 +29,7 @@
 #                                                                                        #
 # Expects to be executed in the AEM Parent folder (the one containing 'crx-quickstart')  #
 #                                                                                        #
-# Performs no changes, just creates a report                                             #
+# Performs no changes, just creates a report.                                            #
 #                                                                                        #
 ##########################################################################################
 
