@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/perl
 ########################################################################################
 # MIT License                                                                          #
 #                                                                                      #
@@ -23,43 +23,76 @@
 # SOFTWARE.                                                                            #
 ########################################################################################
 
-
 ##########################################################################################
-# Small bash+perl script to find duplicate OSGI Factory configurations in AEM            #
-#                                                                                        #
-# Performs no changes, just creates a report.                                            #
-#                                                                                        #
+# Small perl script that takes the output of Felix Console: Status > Configurations [1]  #
+# and produces a list of OSGI Factory configurations that are exactly the same           #
+#																						 #
+# [1] http://localhost:4502/system/console/status-Configurations.txt					 #
 ##########################################################################################
 
-set -ue
 
-SCRIPT_DIR=`dirname "$0"`
+use strict;
+use warnings;
 
-AEM_HOST="${1:-http://localhost:4502}"
-AEM_USER="${2:-admin:admin}"
-WORKDIR="${3:-.}"
+use Digest::MD5 qw(md5_hex);
+use Data::Dumper;
 
-mkdir -pv "$WORKDIR"
-cd "$WORKDIR"
+my $factoryConfigs = {};
 
-curl -s -S -f -u "$AEM_USER" -o "status-osgi-installer.txt" "$AEM_HOST/system/console/status-osgi-installer.txt"
-curl -s -S -f -u "$AEM_USER" -o "status-configurations.txt" "$AEM_HOST/system/console/status-Configurations.txt"
+my $pid = "";
+my $pidDetails = "";
 
-dos2unix -q status-*.txt
+my $i = 0;
 
-"$SCRIPT_DIR/find-osgi-duplicate-factory-configs.pl" < status-configurations.txt > duplicate-factory-configs.txt
+while( my $line = <STDIN>)  {
+    #print $line;
+	chomp $line;
+	$i++;
 
-while IFS=';' read -a dupePids
-do
+	if ($line =~ /^PID = (.*)$/) {
+		$pid = $1;
+		$pidDetails = "";
 
-  echo "## Found #${#dupePids[@]} duplicates ##";
+	}
+	elsif ($pid ne "" && $line eq "") {
+		# end of PID
 
-  for servicePid in "${dupePids[@]}"; do
-    echo "$servicePid"
-    echo "    $AEM_HOST/system/console/configMgr/$servicePid"
-    fgrep "$servicePid" status-osgi-installer.txt | perl -pe 's/^/    /'
-    echo
-  done;
+		if ($pidDetails =~ /Factory PID = (.*)/) {
+			# PID is part of factory config
 
-done < duplicate-factory-configs.txt
+			my $factoryPid = $1;
+			$pidDetails =~ s/$pid//;
+			my $pidDetailsMd5 = md5_hex($pidDetails);
 
+			unless ($factoryConfigs->{$factoryPid}) {
+				$factoryConfigs->{$factoryPid} = {};
+			}
+			unless ($factoryConfigs->{$factoryPid}->{$pidDetailsMd5}) {
+				$factoryConfigs->{$factoryPid}->{$pidDetailsMd5} = [];
+			}
+
+			push @{$factoryConfigs->{$factoryPid}->{$pidDetailsMd5}}, $pid;
+		
+		}
+
+		$pid = "";
+		$pidDetails = "";
+	}
+	elsif ($pid ne "") {
+
+		$pidDetails .= "$line\n";
+
+	}
+	
+
+}
+
+# print Dumper($factoryConfigs)."------------\n";
+
+for my $factoryPid (sort keys %$factoryConfigs) {
+#	print "$factoryPid\n";
+	for my $md5 (keys %{$factoryConfigs->{$factoryPid}}) {
+		my $dupePids = $factoryConfigs->{$factoryPid}->{$md5};
+		print join(";", @$dupePids)."\n" if (scalar @$dupePids > 1);
+	}
+}
