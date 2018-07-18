@@ -134,6 +134,88 @@ Arguments to `aem` are divided up into **operations** and **instances** to perfo
     $ aem ga urls
 
 
+`repo` script
+-------------
+Repo Tool, copied from this GitHub repo into my repo for ease of checkout
+
+See: https://github.com/Adobe-Marketing-Cloud/tools/tree/master/repo
+
+`jcr-dump.sh`
+-------------
+
+Uses [AEM ACS Commons JCR Compare](https://adobe-consulting-services.github.io/acs-aem-commons/features/jcr-compare/index.html) to create a JSON dump for the passed path on the passed server.
+
+    $ jcr-dump.sh http://localhost:4502 admin admin /content/whatever
+
+`jcr-hashes.sh`
+-------------
+
+Uses [AEM ACS Commons JCR Compare](https://adobe-consulting-services.github.io/acs-aem-commons/features/jcr-compare/index.html) to create a hash for the passed path on the passed server.
+
+    $ jcr-hashes.sh http://localhost:4502 admin admin /content/whatever
+
+`json-flatten.js`
+-----------------
+
+Take a JSON file and flatten it to Key Value pairs to make it easier to diff.
+
+Input sample.json:
+
+    {
+      "one": "My string Value One",
+      "sub": {
+        "one": "My other string value",
+        "three": "Another string value three",
+        "two": [
+          "sub array item 1",
+          "sub array item 2"
+        ],
+        "thirty": 30
+      },
+      "three": "string",
+      "two": [
+        "array item 1",
+        "array item 2"
+      ]
+    }
+
+Output:
+
+    $ json-flatten.js sample.json
+    /one="My string Value One"
+    /sub/one="My other string value"
+    /sub/three="Another string value three"
+    /sub/two/0="sub array item 1"
+    /sub/two/1="sub array item 2"
+    /sub/thirty=30
+    /three="string"
+    /two/0="array item 1"
+    /two/1="array item 2"
+
+
+`json-diff.sh`
+-------------
+
+Take 2 JSON files and show the diff of them (uses `json-flatten.js`)
+
+    $ json-diff.sh sample.json sample2.json
+    ++ /_data/AEM/bin/json-flatten.js sample.json
+    + diff --color=auto -u /dev/fd/63 /dev/fd/62
+    ++ /_data/AEM/bin/json-flatten.js sample2.json
+    --- /dev/fd/63  2018-07-18 11:01:52.000000000 +0200
+    +++ /dev/fd/62  2018-07-18 11:01:52.000000000 +0200
+    @@ -1,9 +1,10 @@
+     /one="My string Value One"
+     /sub/one="My other string value"
+    -/sub/three="Another string value three"
+    +/sub/three="A modified string value three"
+     /sub/two/0="sub array item 1"
+     /sub/two/1="sub array item 2"
+     /sub/thirty=30
+     /three="string"
+     /two/0="array item 1"
+     /two/1="array item 2"
+    +/two/2="extra array item 3"
 
 # License
 [MIT License](LICENSE)
