@@ -1,5 +1,6 @@
 #!/bin/bash
 
+PATH="/usr/bin:$PATH"
 ###############################################################################
 # Repo Tool, copied from this GitHub repo into my repo for ease of checkout   #
 #                                                                             #
