@@ -24,19 +24,22 @@
 ########################################################################################
 
 
-##########################################################################################
-# Small bash+perl script to find duplicate OSGI Factory configurations in AEM            #
-#                                                                                        #
-# Performs no changes, just creates a report.                                            #
-#                                                                                        #
-# Usage:                                                                                 #
-#    $ find-osgi-duplicate-factory-configs.sh <aem url> <user> <work dir for tmp files>  #
-#    $ find-osgi-duplicate-factory-configs.sh http://localhost:4502 admin:admin          #
-#    $ find-osgi-duplicate-factory-configs.sh http://localhost:4502 admin:admin .        #
-#                                                                                        #
-##########################################################################################
+###################################################################################################
+# Small bash script to find OSGI bundles and configurations that exist in AEM but not
+# installed by the OSGI Installer (i.e. do not exist in Launchpad or JCR)
+#
+# Performs no changes, just creates a report.
+#
+# Usage:
+#    $ check-missing-osgi-installed-bundles-configs.sh <aem url> <user> <work dir for tmp files> > status-bundles-configs.txt
+#    $ check-missing-osgi-installed-bundles-configs.sh http://localhost:4502 admin:admin         > status-bundles-configs.txt
+#    $ check-missing-osgi-installed-bundles-configs.sh http://localhost:4502 admin:admin .       > status-bundles-configs.txt
+#
+#    $ grep MISSING status-bundles-configs.txt
+###################################################################################################
 
 set -ue
+shopt -s lastpipe
 
 SCRIPT_DIR=`dirname "$0"`
 
@@ -44,27 +47,40 @@ AEM_HOST="${1:-http://localhost:4502}"
 AEM_USER="${2:-admin:admin}"
 WORKDIR="${3:-.}"
 
-mkdir -pv "$WORKDIR"
+mkdir -pv "$WORKDIR" >&2
 cd "$WORKDIR"
 
 curl -s -S -f -u "$AEM_USER" -o "status-osgi-installer.txt" "$AEM_HOST/system/console/status-osgi-installer.txt"
 curl -s -S -f -u "$AEM_USER" -o "status-configurations.txt" "$AEM_HOST/system/console/status-Configurations.txt"
-
+curl -s -S -f -u "$AEM_USER" -o "bundles.json" "$AEM_HOST/system/console/bundles/.json"
 dos2unix -q status-*.txt
 
-"$SCRIPT_DIR/find-osgi-duplicate-factory-configs.pl" < status-configurations.txt > duplicate-factory-configs.txt
+jq -r '.data | sort_by(.id)[] | .id' < bundles.json | dos2unix > bundleids.txt
 
-while IFS=';' read -a dupePids
-do
+for bundleId in `cat bundleids.txt`; do
+  echo "Bundle : $bundleId" >&2
+  curl -s -S -f -u "$AEM_USER" -o "bundle-${bundleId}.json" "$AEM_HOST/system/console/bundles/${bundleId}.json"
 
-  echo "## Found #${#dupePids[@]} duplicates ##";
+  # needs 'lastpipe' above
+  jq -r '.data[0] | .symbolicName + "\t" + (.props | from_entries | .["Bundle Location"])' < "bundle-${bundleId}.json" | dos2unix | read symbolicName bundleLocation
 
-  for servicePid in "${dupePids[@]}"; do
-    echo "$servicePid"
-    echo "    $AEM_HOST/system/console/configMgr/$servicePid"
-    fgrep "$servicePid" status-osgi-installer.txt | perl -pe 's/^/    /'
-    echo
-  done;
+  osgiInstaller=`fgrep "* $symbolicName: " status-osgi-installer.txt | cat`   # 'cat' to always return non zero error code
+  if [ -z "$osgiInstaller" ]; then
+    echo "MISSING : Bundle #$bundleId: $symbolicName ($bundleLocation)"
+  else
+    echo "FOUND   : Bundle #$bundleId: $symbolicName ($bundleLocation) > $osgiInstaller"
+  fi
 
-done < duplicate-factory-configs.txt
+
+done
+
+for configPid in `perl -ne 'print "$1\n" if (/^PID = (.*)$/);' < status-configurations.txt`; do
+  echo "Config : $configPid" >&2
+  osgiInstaller=`fgrep "$configPid: " status-osgi-installer.txt | cat`   # 'cat' to always return non zero error code
+  if [ -z "$osgiInstaller" ]; then
+    echo "MISSING : Config : $configPid"
+  else
+    echo "FOUND   : Config : $configPid > $osgiInstaller"
+  fi
+done;
 
