@@ -94,18 +94,21 @@ publish=""
 debug=""
 browser=""
 
+installPackage=""
+
 instances=()
 
 while test ${#} -gt 0
 do
   arg=`echo "$1" | tr 'A-Z' 'a-z' | sed 's!/!!g'`
+  rawArg="$1"
 
   if [ "$arg" == "url" ]; then
     arg="urls"
   fi
 
   case $arg in
-  conf|start|stop|clean|unpack|compact|jps|logs|urls|testuser)
+  conf|start|stop|clean|unpack|compact|check|jps|logs|urls|testuser|install)
     if [ -n "$op" ]; then
       echo "[ERROR] Only one operation allowed. Already '$op' and now '$arg'" >&2
       exit 1
@@ -121,6 +124,9 @@ do
     ;;
   all)
     instances=("${AEM_INSTANCES[@]}")
+    ;;
+  *.zip)
+    installPackage="$rawArg"
     ;;
   *)
     for s in "${AEM_INSTANCES[@]}"; do
@@ -148,6 +154,7 @@ instances : ${instances[@]}
 
 debug   : $debug
 browser : $browser
+installPackage : $installPackage
 "
 
 if [ -z "$op" ]; then
@@ -299,12 +306,10 @@ function clean_aem {
 
 }
 
-function compact_aem {
-
-  local instance="$1"
+function _check_aem_running {
 
   local aem_running=`"$JAVA_HOME/bin/jps" -mlv | grep -c crx-quickstart`
-  echo $aem_running
+  # echo $aem_running
 
   if [ "$aem_running" -ne "0" ]; then
     echo "[WARN] AEM instances running" >&2
@@ -313,20 +318,24 @@ function compact_aem {
     read -p "Do you really want to continue? [y/N] " force
     if [ "$force" != "y" ]; then
       echo "Aborting";
-      return
+      exit 1
     fi
     echo "OK, continuing"
   fi;
 
-  echo "Compacting AEM $instance"
+}
+
+function _get_oak_run {
+  local instance="$1"
 
   if [ ! -d ./$instance/crx-quickstart/repository -o ! -d ./$instance/crx-quickstart/launchpad ]; then
-    echo "[ERROR] No AEM repository dir found, refusing to compact" >&2
-    return
+    echo "[ERROR] No AEM repository dir found, refusing to continue" >&2
+    exit 1
   fi
 
+  echo "Searching for 'oak-core'.." >&2
   echo
-  fgrep --color=always -r oak-core ./$instance/crx-quickstart/launchpad
+  fgrep --color=always -r oak-core ./$instance/crx-quickstart/launchpad >&2
   echo
 
   read -p "Enter the oak-core version (e.g. 1.4.10): " oak_version
@@ -344,13 +353,52 @@ function compact_aem {
     if [ "$?" -ne "0" ]; then
       echo "[ERROR] Downloading oak-run failed" >&2
       rm "$oak_run"
-      return;
+      exit 1;
     fi
   fi
 
   if [ -n "`which cygpath`" ]; then
   	oak_run=`cygpath -wa "$oak_run"`
   fi
+
+}
+
+function check_aem {
+
+  local instance="$1"
+
+  _check_aem_running
+
+  echo "Checking Repository for AEM $instance"
+
+  _get_oak_run "$instance"  # sets 'oak_run' variable
+
+  echo "Found '$oak_run'";
+  read -p "Ready to continue : [y/N] " ready
+
+  if [ "$ready" != "y" ]; then
+    echo "Aborting" >&2
+    return;
+  fi
+
+  set -x
+  java -jar "$oak_run" check --path ./$instance/crx-quickstart/repository/segmentstore --deep 60 --bin -1 || exit 1
+  set +x
+
+  echo
+
+}
+
+
+function compact_aem {
+
+  local instance="$1"
+
+  _check_aem_running
+
+  echo "Compacting AEM $instance"
+
+  _get_oak_run "$instance"  # sets 'oak_run' variable
 
   echo "Found $oak_run";
   read -p "Ready to continue : [y/N] " ready
@@ -363,11 +411,13 @@ function compact_aem {
   echo "BEFORE SIZE : "
   du -shc ./$instance/crx-quickstart/repository/*
 
+  set -x
   java -jar "$oak_run" checkpoints ./$instance/crx-quickstart/repository/segmentstore || exit 1
 
   java -jar "$oak_run" checkpoints ./$instance/crx-quickstart/repository/segmentstore rm-unreferenced || exit 1
 
   java -jar "$oak_run" compact ./$instance/crx-quickstart/repository/segmentstore || exit 1
+  set +x
 
   echo "AFTER SIZE : "
   du -shc ./$instance/crx-quickstart/repository/*
@@ -418,7 +468,7 @@ function open_browser {
         host="${!var_host}"
 
         echo "Attempt $attempts) Checking AEM $instance on http://$host:$port/"
-        local aem_ready=`curl -s -i -m 5 -L -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:52.0) Gecko/20100101 Firefox/52.0' "http://$host:$port/" | fgrep QUICKSTART_HOMEPAGE`;
+        local aem_ready=`curl -s -i -m 5 -L -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:52.0) Gecko/20100101 Firefox/52.0' "http://$host:$port/libs/granite/core/content/login.html" | fgrep QUICKSTART_HOMEPAGE`;
         if [ -n "$aem_ready" ]; then
           echo ">>> Opening AEM $instance"
           cygstart "http://$host:$port/crx/de/"
@@ -490,9 +540,30 @@ function test_user {
 
     set -x
     curl -i -u "$lusername:$lpassword" "http://$host:$port/libs/cq/security/userinfo.json"
+    set +x
 
   done
 
+}
+
+function install_aem_package {
+
+  local instance="$1"
+  local pkg="$2"
+
+  # variable variables...
+  var_port="${instance}_PORT"
+  var_host="${instance}_HOST"
+
+  port="${!var_port}"
+  host="${!var_host}"
+
+  echo "$instance : http://$host:$port/"
+
+  local pkgname=$(basename "$pkg")
+  set -x
+  curl -i -u "admin:admin" -F file="@$pkg" -F name="$pkgname" -o "$instance/package-install.log" -F force=true -F install=true "http://$host:$port/crx/packmgr/service.jsp"
+  set +x
 }
 
 if [ -z "$JAVA_HOME" -o ! -d "$JAVA_HOME" ]; then
@@ -556,6 +627,12 @@ unpack)
   done;
   ;;
 
+check)
+  for i in "${instances[@]}"; do
+    check_aem $i
+  done;
+  ;;
+
 compact)
   for i in "${instances[@]}"; do
     compact_aem $i
@@ -576,6 +653,12 @@ urls)
 
 testuser)
   test_user "${instances[@]}"
+  ;;
+
+install)
+  for i in "${instances[@]}"; do
+    install_aem_package "$i" "$installPackage"
+  done;
   ;;
 
 jps)
