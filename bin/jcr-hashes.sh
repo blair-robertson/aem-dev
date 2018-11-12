@@ -31,8 +31,8 @@ AEM_USER="${2:-admin}"
 AEM_PASSWORD="${3:-admin}"
 AEM_PATH="${4:-/content/we-retail}"
 
-set -x
-curl -G -u "${AEM_USER}:${AEM_PASSWORD}" \
+# set -x
+curl -sSf -G -u "${AEM_USER}:${AEM_PASSWORD}" \
 "${AEM_HOST}/bin/acs-commons/jcr-compare.hashes.txt" \
 -d 'optionsName=REQUEST' \
 -d "paths=${AEM_PATH}" \
