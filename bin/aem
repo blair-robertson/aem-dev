@@ -562,7 +562,7 @@ function install_aem_package {
 
   local pkgname=$(basename "$pkg")
   set -x
-  curl -i -u "admin:admin" -F file="@$pkg" -F name="$pkgname" -o "$instance/package-install.log" -F force=true -F install=true "http://$host:$port/crx/packmgr/service.jsp"
+  curl -i -u "admin:admin" -F file="@$pkg" -F name="$pkgname" -F force=true -F install=true "http://$host:$port/crx/packmgr/service.jsp" >> "$instance/package-install.log"
   set +x
 }
 
