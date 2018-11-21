@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2034
 ########################################################################################
 # MIT License                                                                          #
 #                                                                                      #
@@ -57,11 +58,11 @@ if [[ "$(uname -s)" == *"CYGWIN"* ]]; then
   CYGWIN="CYGWIN"
 fi
 
-orig_pwd=`pwd`
-echo "Searching for aem.conf in `pwd`";
-until [ `pwd` == "/" -o -f "aem.conf" ]; do
-  cd ../
-  echo "Searching for aem.conf in `pwd`";
+orig_pwd=$(pwd)
+echo "Searching for aem.conf in $(pwd)";
+until [ "$(pwd)" == "/" ] || [ -f "aem.conf" ]; do
+  cd ../ || exit 1
+  echo "Searching for aem.conf in $(pwd)"
 done;
 
 echo
@@ -70,27 +71,24 @@ if [ ! -f aem.conf ]; then
   echo "No aem.conf found in directory path" >&2
 
   # exit unless we are running 'conf' operation
-  if [[ "$@" != *"conf"* ]]; then
+  if [[ "$*" != *"conf"* ]]; then
     exit 1
   fi
 
   # change back to original directory
-  cd "$orig_pwd"
-  echo "BASE DIR : $orig_pwd";
+  cd "$orig_pwd" || exit 1
+  echo "BASE DIR : $orig_pwd"
 
 else
 
-  echo "BASE DIR : `pwd`";
+  echo "BASE DIR : $(pwd)";
+  # shellcheck disable=SC1091
   . aem.conf || exit 1
 
 fi
 
-
 op=""
 
-all=""
-author=""
-publish=""
 debug=""
 browser=""
 
@@ -100,7 +98,7 @@ instances=()
 
 while test ${#} -gt 0
 do
-  arg=`echo "$1" | tr 'A-Z' 'a-z' | sed 's!/!!g'`
+  arg=$(echo "$1" | tr '[:upper:]' '[:lower:]' | sed 's!/!!g')
   rawArg="$1"
 
   if [ "$arg" == "url" ]; then
@@ -142,7 +140,7 @@ done
 
 # if we have no op, but browser is set, then browser is op
 # this allows "aem <instance> start browser" and "aem <instance> browser"
-if [ -z "$op" -a -n "$browser" ]; then
+if [ -z "$op" ] && [ -n "$browser" ]; then
   op="$browser"
   browser=""
 fi
@@ -150,7 +148,7 @@ fi
 echo "
 operation : $op
 
-instances : ${instances[@]}
+instances : ${instances[*]}
 
 debug   : $debug
 browser : $browser
@@ -162,7 +160,7 @@ if [ -z "$op" ]; then
   exit 1
 fi;
 
-if [ "$op" != "conf" -a "$op" != "jps" -a "${#instances[@]}" -eq "0" ]; then
+if [ "$op" != "conf" ] && [ "$op" != "jps" ] && [ "${#instances[@]}" -eq "0" ]; then
   echo "[ERROR] No instances specified" >&2
   exit 1
 fi;
@@ -179,7 +177,7 @@ function show_create_conf {
 
   if [ ! -f aem.conf ]; then
 
-    read -p "Do you want to create an aem.conf? [y/N] " create_file
+    read -rp "Do you want to create an aem.conf? [y/N] " create_file
     if [ "$create_file" != "y" ]; then
       return
     fi
@@ -217,11 +215,11 @@ zzzENDAEMCONF
 
 function _check_aem_prereqs {
 
-  if [ -z "$AEM_JAR" -o ! -f "$AEM_JAR" ]; then
+  if [ -z "$AEM_JAR" ] || [ ! -f "$AEM_JAR" ]; then
     echo "[ERROR] AEM_JAR not set correctly" >&2
     exit 1
   fi
-  if [ -z "$AEM_LICENSE" -o ! -f "$AEM_LICENSE" ]; then
+  if [ -z "$AEM_LICENSE" ] || [ ! -f "$AEM_LICENSE" ]; then
     echo "[ERROR] AEM_LICENSE not set correctly" >&2
     exit 1
   fi
@@ -234,14 +232,14 @@ function unpack_aem {
 
   _check_aem_prereqs
 
-  mkdir -p $instance
-  pushd $instance > /dev/null
+  mkdir -p "$instance"
+  pushd "$instance" > /dev/null || return 1
   if [ -d crx-quickstart ]; then
     echo "[ERROR] Unable to unpack AEM $instance - Already crx-quickstart directory" >&2
   else
-    java -jar $AEM_JAR -unpack
+    java -jar "$AEM_JAR" -unpack
   fi
-  popd > /dev/null
+  popd > /dev/null || return 1
 
 }
 
@@ -262,8 +260,8 @@ function start_aem {
 
   echo "Starting AEM $instance on http://$host:$port/"
 
-  mkdir -p $instance
-  pushd $instance > /dev/null
+  mkdir -p "$instance"
+  pushd "$instance" > /dev/null || return 1
   if [ ! -d crx-quickstart ]; then
     java -jar $AEM_JAR -unpack
   fi
@@ -280,7 +278,7 @@ function start_aem {
   export CQ_JVM_OPTS
   ./crx-quickstart/bin/start
 
-  popd > /dev/null
+  popd > /dev/null || return 1
 
   echo -e "\n\n\n";
 
@@ -291,7 +289,7 @@ function stop_aem {
   local instance="$1"
 
   echo "Stopping AEM $instance"
-  ./$instance/crx-quickstart/bin/stop
+  "./$instance/crx-quickstart/bin/stop"
 
 }
 
@@ -300,22 +298,23 @@ function clean_aem {
   local instance="$1"
 
   echo "Cleaning AEM $instance"
-  if [ -d ./$instance/crx-quickstart ]; then
-    rm -r ./$instance/crx-quickstart
+  if [ -d "./$instance/crx-quickstart" ]; then
+    rm -r "./$instance/crx-quickstart"
   fi
 
 }
 
 function _check_aem_running {
 
-  local aem_running=`"$JAVA_HOME/bin/jps" -mlv | grep -c crx-quickstart`
+  local aem_running
+  aem_running=$("$JAVA_HOME/bin/jps" -mlv | grep -c crx-quickstart)
   # echo $aem_running
 
   if [ "$aem_running" -ne "0" ]; then
     echo "[WARN] AEM instances running" >&2
     run_jps
     echo
-    read -p "Do you really want to continue? [y/N] " force
+    read -rp "Do you really want to continue? [y/N] " force
     if [ "$force" != "y" ]; then
       echo "Aborting";
       exit 1
@@ -328,19 +327,19 @@ function _check_aem_running {
 function _get_oak_run {
   local instance="$1"
 
-  if [ ! -d ./$instance/crx-quickstart/repository -o ! -d ./$instance/crx-quickstart/launchpad ]; then
+  if [ ! -d "./$instance/crx-quickstart/repository" ] || [ ! -d "./$instance/crx-quickstart/launchpad" ]; then
     echo "[ERROR] No AEM repository dir found, refusing to continue" >&2
     exit 1
   fi
 
   echo "Searching for 'oak-core'.." >&2
   echo
-  fgrep --color=always -r oak-core ./$instance/crx-quickstart/launchpad >&2
+  grep -F --color=always -r oak-core "./$instance/crx-quickstart/launchpad" >&2
   echo
 
-  read -p "Enter the oak-core version (e.g. 1.4.10): " oak_version
+  read -rp "Enter the oak-core version (e.g. 1.4.10): " oak_version
 
-  oak_run_dir=`dirname "$AEM_JAR"`/oak-run
+  oak_run_dir="$(dirname "$AEM_JAR")/oak-run"
 
   mkdir -p "$oak_run_dir" || exit 1
 
@@ -349,16 +348,15 @@ function _get_oak_run {
   oak_run="$oak_run_dir/$oak_run_jar"
 
   if [ ! -f "$oak_run" ]; then
-    wget -O "$oak_run" "https://repo1.maven.org/maven2/org/apache/jackrabbit/oak-run/$oak_version/$oak_run_jar"
-    if [ "$?" -ne "0" ]; then
+    if wget -O "$oak_run" "https://repo1.maven.org/maven2/org/apache/jackrabbit/oak-run/$oak_version/$oak_run_jar"; then
       echo "[ERROR] Downloading oak-run failed" >&2
       rm "$oak_run"
       exit 1;
     fi
   fi
 
-  if [ -n "`which cygpath`" ]; then
-  	oak_run=`cygpath -wa "$oak_run"`
+  if command -v cygpath > /dev/null; then
+  	oak_run=$(cygpath -wa "$oak_run")
   fi
 
 }
@@ -374,7 +372,7 @@ function check_aem {
   _get_oak_run "$instance"  # sets 'oak_run' variable
 
   echo "Found '$oak_run'";
-  read -p "Ready to continue : [y/N] " ready
+  read -rp "Ready to continue : [y/N] " ready
 
   if [ "$ready" != "y" ]; then
     echo "Aborting" >&2
@@ -382,7 +380,7 @@ function check_aem {
   fi
 
   set -x
-  java -jar "$oak_run" check --path ./$instance/crx-quickstart/repository/segmentstore --deep 60 --bin -1 || exit 1
+  java -jar "$oak_run" check --path "./$instance/crx-quickstart/repository/segmentstore" --deep 60 --bin -1 || exit 1
   set +x
 
   echo
@@ -401,7 +399,7 @@ function compact_aem {
   _get_oak_run "$instance"  # sets 'oak_run' variable
 
   echo "Found $oak_run";
-  read -p "Ready to continue : [y/N] " ready
+  read -rp "Ready to continue : [y/N] " ready
 
   if [ "$ready" != "y" ]; then
     echo "Aborting" >&2
@@ -409,18 +407,18 @@ function compact_aem {
   fi
 
   echo "BEFORE SIZE : "
-  du -shc ./$instance/crx-quickstart/repository/*
+  du -shc "./$instance/crx-quickstart/repository"/*
 
   set -x
-  java -jar "$oak_run" checkpoints ./$instance/crx-quickstart/repository/segmentstore || exit 1
+  java -jar "$oak_run" checkpoints "./$instance/crx-quickstart/repository/segmentstore" || exit 1
 
-  java -jar "$oak_run" checkpoints ./$instance/crx-quickstart/repository/segmentstore rm-unreferenced || exit 1
+  java -jar "$oak_run" checkpoints "./$instance/crx-quickstart/repository/segmentstore" rm-unreferenced || exit 1
 
-  java -jar "$oak_run" compact ./$instance/crx-quickstart/repository/segmentstore || exit 1
+  java -jar "$oak_run" compact "./$instance/crx-quickstart/repository/segmentstore" || exit 1
   set +x
 
   echo "AFTER SIZE : "
-  du -shc ./$instance/crx-quickstart/repository/*
+  du -shc "./$instance/crx-quickstart/repository"/*
 
   echo
 
@@ -437,7 +435,7 @@ function open_logs {
 
   ls -al "${log_files[@]}"
 
-  if [ -n "`which baretail`" ]; then
+  if command -v baretail; then
     baretail "${log_files[@]}" &
   fi
 
@@ -446,7 +444,7 @@ function open_logs {
 
 function open_browser {
 
-  if [ -n "`which cygstart`" ]; then
+  if command -v cygstart > /dev/null; then
 
     log_files=()
 
@@ -468,7 +466,8 @@ function open_browser {
         host="${!var_host}"
 
         echo "Attempt $attempts) Checking AEM $instance on http://$host:$port/"
-        local aem_ready=`curl -s -i -m 5 -L -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:52.0) Gecko/20100101 Firefox/52.0' "http://$host:$port/libs/granite/core/content/login.html" | fgrep QUICKSTART_HOMEPAGE`;
+        local aem_ready
+        aem_ready=$(curl -s -i -m 5 -L -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:52.0) Gecko/20100101 Firefox/52.0' "http://$host:$port/libs/granite/core/content/login.html" | grep -F QUICKSTART_HOMEPAGE);
         if [ -n "$aem_ready" ]; then
           echo ">>> Opening AEM $instance"
           cygstart "http://$host:$port/crx/de/"
@@ -480,7 +479,7 @@ function open_browser {
       instances=("${remaining_instances[@]}")
 
       if [ "${#instances[@]}" -gt 0 ]; then
-        echo "Pausing for 30 seconds before trying again for : ${remaining_instances[@]}"
+        echo "Pausing for 30 seconds before trying again for : ${remaining_instances[*]}"
         sleep 30;
       fi
 
@@ -525,8 +524,8 @@ function test_user {
 
   local instances=("$@")
 
-  read -p "Username: " -i "admin" lusername
-  read -p "Password: " -i "admin" lpassword
+  read -ei "admin" -rp "Username: " lusername
+  read -ei "admin" -rp "Password: " lpassword
 
   for instance in "${instances[@]}"; do
     # variable variables...
@@ -560,13 +559,14 @@ function install_aem_package {
 
   echo "$instance : http://$host:$port/"
 
-  local pkgname=$(basename "$pkg")
+  local pkgname
+  pkgname=$(basename "$pkg")
   set -x
   curl -i -u "admin:admin" -F file="@$pkg" -F name="$pkgname" -F force=true -F install=true "http://$host:$port/crx/packmgr/service.jsp" >> "$instance/package-install.log"
   set +x
 }
 
-if [ -z "$JAVA_HOME" -o ! -d "$JAVA_HOME" ]; then
+if [ -z "$JAVA_HOME" ] || [ ! -d "$JAVA_HOME" ]; then
   if [ "$op" != "conf" ]; then
     echo "[ERROR] JAVA_HOME not set correctly : '$JAVA_HOME'" >&2
     exit 1
@@ -576,12 +576,12 @@ if [ -z "$JAVA_HOME" -o ! -d "$JAVA_HOME" ]; then
 fi
 
 if [ -n "$CYGWIN" ]; then
-  JAVA_HOME=`cygpath -u "$JAVA_HOME"`
+  JAVA_HOME=$(cygpath -u "$JAVA_HOME")
 fi
 
 export JAVA_HOME
 
-export PATH=$JAVA_HOME/bin:$PATH;
+export PATH="$JAVA_HOME/bin:$PATH";
 
 case $op in
 conf)
@@ -591,7 +591,7 @@ conf)
 start)
 
   for i in "${instances[@]}"; do
-    start_aem $i
+    start_aem "$i"
   done;
 
   echo "Waiting for 5 seconds"
@@ -609,7 +609,7 @@ start)
 stop)
 
   for i in "${instances[@]}"; do
-    stop_aem $i
+    stop_aem "$i"
   done;
 
   run_jps
@@ -617,25 +617,25 @@ stop)
 
 clean)
   for i in "${instances[@]}"; do
-    clean_aem $i
+    clean_aem "$i"
   done;
   ;;
 
 unpack)
   for i in "${instances[@]}"; do
-    unpack_aem $i
+    unpack_aem "$i"
   done;
   ;;
 
 check)
   for i in "${instances[@]}"; do
-    check_aem $i
+    check_aem "$i"
   done;
   ;;
 
 compact)
   for i in "${instances[@]}"; do
-    compact_aem $i
+    compact_aem "$i"
   done;
   ;;
 
