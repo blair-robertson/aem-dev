@@ -170,7 +170,7 @@ if [[ $AEM_JVM_OPTS != *"-Xmx"* ]]; then
   exit 1
 fi
 
-CQ_JVM_OPTS="-server -Djava.awt.headless=true $AEM_JVM_OPTS"
+CQ_DEFAULT_JVM_OPTS="-server -Djava.awt.headless=true $AEM_JVM_OPTS"
 CQ_DEBUG_JVM_OPTS="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=1"
 
 function show_create_conf {
@@ -273,7 +273,9 @@ function start_aem {
   export CQ_RUNMODE="${mode},${AEM_RUNMODES}"
   if [ -n "$debug" ]; then
     echo ">> DEBUG PORT : 1$CQ_PORT";
-    CQ_JVM_OPTS="$CQ_JVM_OPTS $CQ_DEBUG_JVM_OPTS$CQ_PORT"
+    CQ_JVM_OPTS="$CQ_DEFAULT_JVM_OPTS $CQ_DEBUG_JVM_OPTS$CQ_PORT"
+  else 
+    CQ_JVM_OPTS="$CQ_DEFAULT_JVM_OPTS"
   fi
   export CQ_JVM_OPTS
   ./crx-quickstart/bin/start
@@ -410,11 +412,11 @@ function compact_aem {
   du -shc "./$instance/crx-quickstart/repository"/*
 
   set -x
-  java -jar "$oak_run" checkpoints "./$instance/crx-quickstart/repository/segmentstore" || exit 1
+  java -Xmx4g -jar "$oak_run" checkpoints "./$instance/crx-quickstart/repository/segmentstore" || exit 1
 
-  java -jar "$oak_run" checkpoints "./$instance/crx-quickstart/repository/segmentstore" rm-unreferenced || exit 1
+  java -Xmx4g -jar "$oak_run" checkpoints "./$instance/crx-quickstart/repository/segmentstore" rm-unreferenced || exit 1
 
-  java -jar "$oak_run" compact "./$instance/crx-quickstart/repository/segmentstore" || exit 1
+  java -Xmx8g -jar "$oak_run" compact "./$instance/crx-quickstart/repository/segmentstore" || exit 1
   set +x
 
   echo "AFTER SIZE : "
