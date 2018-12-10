@@ -27,12 +27,11 @@
 set -ue
 
 AEM_HOST="${1:-http://localhost:4502}"
-AEM_USER="${2:-admin}"
-AEM_PASSWORD="${3:-admin}"
-AEM_PATH="${4:-/content/we-retail}"
+AEM_USER="${2:-admin:admin}"
+AEM_PATH="${3:-/content/we-retail}"
 
 # set -x
-curl -sSf -G -u "${AEM_USER}:${AEM_PASSWORD}" \
+curl -sSf -G -u "${AEM_USER}" \
 "${AEM_HOST}/bin/acs-commons/jcr-compare.dump.json" \
 -d 'optionsName=REQUEST' \
 -d "paths=${AEM_PATH}" \
