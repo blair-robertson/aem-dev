@@ -220,12 +220,14 @@ zzzENDAEMCONF
 function _check_aem_prereqs {
 
   if [ -z "$AEM_JAR" ] || [ ! -f "$AEM_JAR" ]; then
-    echo "[ERROR] AEM_JAR not set correctly" >&2
+    echo "[ERROR] AEM_JAR '$AEM_JAR' not set correctly" >&2
     exit 1
   fi
-  if [ -z "$AEM_LICENSE" ] || [ ! -f "$AEM_LICENSE" ]; then
-    echo "[ERROR] AEM_LICENSE not set correctly" >&2
-    exit 1
+  if [[ "$AEM_JAR" != *"sdk"* ]]; then
+	if [ -z "$AEM_LICENSE" ] || [ ! -f "$AEM_LICENSE" ]; then
+		echo "[ERROR] AEM_LICENSE not set correctly" >&2
+		exit 1
+	fi
   fi
 
 }
@@ -269,7 +271,7 @@ function start_aem {
   if [ ! -d crx-quickstart ]; then
     java -jar $AEM_JAR -unpack
   fi
-  if [ ! -f license.properties ]; then
+  if [ -n "$AEM_LICENSE" ] && [ -f "$AEM_LICENSE" ] && [ ! -f license.properties ]; then
     cp $AEM_LICENSE license.properties
   fi
 
