@@ -54,8 +54,12 @@ publish_PORT="4503"
 
 
 CYGWIN=""
+WSL=""
+DOTEXE=""
 if [[ "$(uname -s)" == *"CYGWIN"* ]]; then
   CYGWIN="CYGWIN"
+elif [[ "$(uname -a)" == *"Microsoft"* ]]; then
+  WSL="WSL"
 fi
 
 orig_pwd=$(pwd)
@@ -309,7 +313,7 @@ function clean_aem {
 function _check_aem_running {
 
   local aem_running
-  aem_running=$("$JAVA_HOME/bin/jps" -mlv | grep -c crx-quickstart)
+  aem_running=$("$JAVA_HOME/bin/jps$DOTEXE" -mlv | grep -c crx-quickstart)
   # echo $aem_running
 
   if [ "$aem_running" -ne "0" ]; then
@@ -518,8 +522,8 @@ function show_urls {
 
 
 function run_jps {
-  echo "$JAVA_HOME/bin/jps" -mlv
-  "$JAVA_HOME/bin/jps" -mlv
+  echo "$JAVA_HOME/bin/jps$DOTEXE" -mlv
+  "$JAVA_HOME/bin/jps$DOTEXE" -mlv
 }
 
 function test_user {
@@ -579,6 +583,17 @@ fi
 
 if [ -n "$CYGWIN" ]; then
   JAVA_HOME=$(cygpath -u "$JAVA_HOME")
+elif [ -n "$WSL" ]; then
+
+  if [ ! -d "$JAVA_HOME" ]; then
+    JAVA_HOME=$(wslpath -u "$JAVA_HOME")
+  fi
+
+  if [ -f "$JAVA_HOME/bin/java.exe" ]; then
+    # If in WSL but calling Windows Java, then need to add .exe to call (not required from Cygwin)
+    DOTEXE=".exe"
+  fi
+
 fi
 
 export JAVA_HOME
