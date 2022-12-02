@@ -279,7 +279,16 @@ function start_aem {
   export CQ_RUNMODE="${mode},${AEM_RUNMODES}"
   if [ -n "$debug" ]; then
     echo ">> DEBUG PORT : 1$CQ_PORT";
-    CQ_JVM_OPTS="$CQ_DEFAULT_JVM_OPTS $CQ_DEBUG_JVM_OPTS$CQ_PORT"
+    echo ">> JMX   PORT : 2$CQ_PORT";
+    CQ_JMX_JVM_OPTS=""
+    CQ_JMX_JVM_OPTS="$CQ_JMX_JVM_OPTS -Dcom.sun.management.jmxremote=true "
+    CQ_JMX_JVM_OPTS="$CQ_JMX_JVM_OPTS -Djava.rmi.server.hostname=127.0.0.1 "
+    CQ_JMX_JVM_OPTS="$CQ_JMX_JVM_OPTS -Dcom.sun.management.jmxremote.port=2$CQ_PORT "
+    CQ_JMX_JVM_OPTS="$CQ_JMX_JVM_OPTS -Dcom.sun.management.jmxremote.ssl=false "
+    CQ_JMX_JVM_OPTS="$CQ_JMX_JVM_OPTS -Dcom.sun.management.jmxremote.registry.ssl=false "
+    CQ_JMX_JVM_OPTS="$CQ_JMX_JVM_OPTS -Dcom.sun.management.jmxremote.authenticate=false "
+
+    CQ_JVM_OPTS="$CQ_DEFAULT_JVM_OPTS $CQ_DEBUG_JVM_OPTS$CQ_PORT $CQ_JMX_JVM_OPTS"
   else 
     CQ_JVM_OPTS="$CQ_DEFAULT_JVM_OPTS"
   fi
