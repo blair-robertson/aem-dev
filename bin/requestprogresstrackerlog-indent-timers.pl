@@ -2,7 +2,7 @@
 ########################################################################################
 # MIT License                                                                          #
 #                                                                                      #
-# Copyright (c) Blair Robertson 2018                                                   #
+# Copyright (c) Blair Robertson 2018,2022                                              #
 #                                                                                      #
 # Permission is hereby granted, free of charge, to any person obtaining a copy         #
 # of this software and associated documentation files (the "Software"), to deal        #
@@ -36,7 +36,7 @@
 #																												#
 #################################################################################################################
 
-# Each log entry looks liks this
+# AEM 6.2 era Each log entry looks liks this - in AEM Cloud Service this is collapsed into 1 line.
 
 #	19.10.2018 14:41:15.470 *DEBUG* [10.166.218.191 [1539952874531] GET /content/page.html HTTP/1.1] org.apache.sling.engine.impl.debug.RequestProgressTrackerLogFilter
 #		  0 TIMER_START{Request Processing}
@@ -77,18 +77,28 @@ while( my $line = <STDIN>)  {
 #    print $line;
 	chomp $line;
 
-	if ($line =~ /^(\s*[0-9]+) (TIMER_(START|END).+)$/) {
+	if ($line =~ /^[0-9.]{2}.* \*DEBUG\* \[.*\] org.apache.sling.engine.impl.debug.RequestProgressTrackerLogFilter _(.*)$/) {
 
-		$i-- if ($3 eq "END");
-		print $1." ".($INDENT x $i).$2."\n";
-		$i++ if ($3 eq "START");
+		my @entries = split(/_(?=\s*[0-9]+ (?:TIMER_START|TIMER_END|LOG|COMMENT))/, $1);
+		# print Dumper(\@entries);
 
-	}
-	elsif ($PRINT_NON_TIMERS && $line =~ /^(\s*[0-9]+) (.+)$/) {
-		print $1." ".($INDENT x $i).$2."\n";
-	}
-	elsif ($PRINT_NON_TIMERS) {
-		print "$line\n";
+		foreach my $entry (@entries) {
+
+			if ($entry =~ /^(\s*[0-9]+) (TIMER_(START|END).+)$/) {
+
+				$i-- if ($3 eq "END");
+				print $1." ".($INDENT x $i).$2."\n";
+				$i++ if ($3 eq "START");
+
+			}
+			elsif ($PRINT_NON_TIMERS && $entry =~ /^(\s*[0-9]+) (.+)$/) {
+				print $1." ".($INDENT x $i).$2."\n";
+			}
+
+		}
+
+	} else {
+		print STDERR "Unregonized line : $line\n";
 	}
 
 }
