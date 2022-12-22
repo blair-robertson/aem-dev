@@ -56,9 +56,10 @@ publish_PORT="4503"
 CYGWIN=""
 WSL=""
 DOTEXE=""
-if [[ "$(uname -s)" == *"CYGWIN"* ]]; then
+uname=$(uname -a | tr '[:lower:]' '[:upper:]')
+if [[ "$uname" == *"CYGWIN"* ]]; then
   CYGWIN="CYGWIN"
-elif [[ "$(uname -a)" == *"Microsoft"* ]]; then
+elif [[ "$uname" == *"MICROSOFT"* ]]; then
   WSL="WSL"
 fi
 
@@ -461,7 +462,15 @@ function open_logs {
 
 function open_browser {
 
-  if command -v cygstart > /dev/null; then
+  local start_cmd=""
+
+  if [ -n "$CYGWIN" ]; then
+    start_cmd="cygstart"
+  elif [ -n "$WSL" ]; then
+    start_cmd="wslview"
+  fi
+
+  if [ -n "$start_cmd" ]; then
 
     log_files=()
 
@@ -487,7 +496,7 @@ function open_browser {
         aem_ready=$(curl -s -i -m 5 -L -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:52.0) Gecko/20100101 Firefox/52.0' "http://$host:$port/libs/granite/core/content/login.html" | grep -F QUICKSTART_HOMEPAGE);
         if [ -n "$aem_ready" ]; then
           echo ">>> Opening AEM $instance"
-          cygstart "http://$host:$port/crx/de/"
+          $start_cmd "http://$host:$port/crx/de/"
         else
           remaining_instances=("${remaining_instances[@]}" "$instance")
         fi
