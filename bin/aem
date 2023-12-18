@@ -86,7 +86,8 @@ if [ ! -f aem.conf ]; then
 
 else
 
-  echo "BASE DIR : $(pwd)";
+  export AEMCONFDIR=$(pwd)
+  echo "BASE DIR : $AEMCONFDIR";
   # shellcheck disable=SC1091
   . aem.conf || exit 1
 
@@ -366,7 +367,8 @@ function _get_oak_run {
   oak_run="$oak_run_dir/$oak_run_jar"
 
   if [ ! -f "$oak_run" ]; then
-    if wget -O "$oak_run" "https://repo1.maven.org/maven2/org/apache/jackrabbit/oak-run/$oak_version/$oak_run_jar"; then
+    wget -O "$oak_run" "https://repo1.maven.org/maven2/org/apache/jackrabbit/oak-run/$oak_version/$oak_run_jar"
+    if [ "$?" -ne "0" ]; then
       echo "[ERROR] Downloading oak-run failed" >&2
       rm "$oak_run"
       exit 1;
